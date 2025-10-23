@@ -6,20 +6,21 @@ import { fetchBusinessInfo, checkPoints } from "./utils/api.js";
 
 export default function App({ businessId }) {
   const [business, setBusiness] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [loyaltyId, setLoyaltyId] = useState(localStorage.getItem("loyaltyId"));
   const [points, setPoints] = useState(null);
   const [showEnterExisting, setShowEnterExisting] = useState(false);
 
-  // Fetch business info
+  // Fetch business info on load
   useEffect(() => {
     async function loadBusiness() {
       try {
         const data = await fetchBusinessInfo(businessId);
         setBusiness(data);
       } catch (err) {
-        setError(err.message || "Failed to load business");
+        console.error("Failed to fetch business info:", err);
+        setError("Could not load business info");
       } finally {
         setLoading(false);
       }
@@ -27,15 +28,15 @@ export default function App({ businessId }) {
     loadBusiness();
   }, [businessId]);
 
-  // Fetch points if a loyalty ID already exists
+  // Fetch points if a loyaltyId exists
   useEffect(() => {
     async function loadPoints() {
       if (loyaltyId) {
         try {
           const res = await checkPoints(businessId, loyaltyId);
           if (res?.points !== undefined) setPoints(res.points);
-        } catch {
-          console.warn("No points found for loyaltyId:", loyaltyId);
+        } catch (err) {
+          console.warn("Error fetching points:", err);
         }
       }
     }
@@ -49,27 +50,12 @@ export default function App({ businessId }) {
     setShowEnterExisting(false);
   };
 
-  // --- UI RENDER ---
-  if (loading) {
-    return (
-      <div className="widget">
-        <p>Loading business...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="widget">
-        <h3>Error loading business</h3>
-        <p>{error}</p>
-      </div>
-    );
-  }
+  if (loading) return <p>Loading business...</p>;
+  if (error) return <p>{error}</p>;
 
   return (
     <div className="widget">
-      {business && <h3>{business.name} Rewards</h3>}
+      <h3>{business?.name || "Rewards"}</h3>
 
       {!loyaltyId && !showEnterExisting && (
         <>
@@ -122,6 +108,12 @@ export default function App({ businessId }) {
           points={points}
           onLogout={handleLogout}
         />
+      )}
+
+      {!loyaltyId && !showEnterExisting && points === null && (
+        <p style={{ marginTop: "20px", color: "#777" }}>
+          Generate or enter a Loyalty ID to start earning rewards.
+        </p>
       )}
     </div>
   );
