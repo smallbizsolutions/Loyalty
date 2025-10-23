@@ -1,17 +1,32 @@
-import React from "react";
+import React, { useState } from "react";
 import { createLoyaltyId } from "../utils/api.js";
 
-export default function CreateId({ businessId, onCreate }) {
+export default function CreateId({ businessId, onCreate, onShowEnter }) {
+  const [created, setCreated] = useState(false);
+  const [newId, setNewId] = useState(null);
+
   const handleCreate = async () => {
     const res = await createLoyaltyId(businessId);
-    localStorage.setItem("loyaltyId", res.loyaltyId);
-    onCreate(res.loyaltyId);
+    if (res?.loyaltyId) {
+      localStorage.setItem("loyaltyId", res.loyaltyId);
+      setNewId(res.loyaltyId);
+      setCreated(true);
+      onCreate(res.loyaltyId);
+    }
   };
 
   return (
     <div>
-      <p>Get your Loyalty ID — no signups or personal info needed.</p>
-      <button onClick={handleCreate}>Generate My Loyalty ID</button>
+      {!created ? (
+        <>
+          <button onClick={handleCreate}>Generate My Loyalty ID</button>
+        </>
+      ) : (
+        <div>
+          <p>Your Loyalty ID: <strong>{newId}</strong></p>
+          <p>Save this number — you can use it on any device to access your rewards.</p>
+        </div>
+      )}
     </div>
   );
 }
