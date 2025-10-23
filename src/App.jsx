@@ -1,176 +1,358 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { fetchBusinessInfo, createLoyaltyId, checkPoints } from "./utils/api.js";
 
 export default function App({ businessId }) {
-  const [status, setStatus] = useState("Loading...");
-  const [loyaltyId, setLoyaltyId] = useState(null);
+  const [business, setBusiness] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [logs, setLogs] = useState([]);
+  const [loyaltyId, setLoyaltyId] = useState(localStorage.getItem(`loyalty_${businessId}`));
+  const [points, setPoints] = useState(null);
+  const [showEnter, setShowEnter] = useState(false);
+  const [input, setInput] = useState("");
+  const [checkError, setCheckError] = useState(null);
 
-  const addLog = (message) => {
-    console.log(message);
-    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
-  };
-
+  // Load business info
   useEffect(() => {
-    addLog(`App started with businessId: ${businessId}`);
-    testAPI();
+    async function loadBusiness() {
+      try {
+        const data = await fetchBusinessInfo(businessId);
+        setBusiness(data);
+      } catch (err) {
+        setError("Business not found. Please check your URL.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadBusiness();
   }, [businessId]);
 
-  const testAPI = async () => {
+  // If loyalty ID exists, load their points
+  useEffect(() => {
+    async function loadPoints() {
+      if (!loyaltyId) return;
+      try {
+        const data = await checkPoints(businessId, loyaltyId);
+        if (data?.points !== undefined) setPoints(data.points);
+      } catch (err) {
+        console.error("Failed to load points:", err);
+      }
+    }
+    loadPoints();
+  }, [businessId, loyaltyId]);
+
+  // Create new ID
+  const handleCreate = async () => {
     try {
-      addLog("Testing business API...");
-      const res = await fetch(`/api/business/${businessId}`);
-      addLog(`Business API response status: ${res.status}`);
-      
-      if (res.ok) {
-        const data = await res.json();
-        addLog(`Business loaded: ${data.name}`);
-        setStatus(`Connected to: ${data.name}`);
-      } else {
-        const text = await res.text();
-        addLog(`Business API error: ${text}`);
-        setError(`Failed to load business: ${res.status}`);
+      const res = await createLoyaltyId(businessId);
+      if (res?.loyaltyId) {
+        localStorage.setItem(`loyalty_${businessId}`, res.loyaltyId);
+        setLoyaltyId(res.loyaltyId);
+        setPoints(0);
       }
     } catch (err) {
-      addLog(`Business API exception: ${err.message}`);
-      setError(`Network error: ${err.message}`);
+      setError("Failed to create loyalty ID. Please try again.");
     }
   };
 
-  const handleCreateClick = async () => {
-    addLog("Create button clicked!");
-    setError(null);
-    
+  // Enter existing ID
+  const handleEnter = async () => {
+    if (!input.trim()) return;
+    setCheckError(null);
     try {
-      addLog(`Calling POST /api/loyalty/create with businessId: ${businessId}`);
-      
-      const response = await fetch("/api/loyalty/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ businessId: businessId }),
-      });
-
-      addLog(`Create API response status: ${response.status}`);
-      
-      const data = await response.json();
-      addLog(`Create API response data: ${JSON.stringify(data)}`);
-
-      if (response.ok && data.loyaltyId) {
-        addLog(`SUCCESS! Loyalty ID created: ${data.loyaltyId}`);
-        setLoyaltyId(data.loyaltyId);
-        localStorage.setItem("loyaltyId", data.loyaltyId);
-      } else {
-        addLog(`Create failed: ${JSON.stringify(data)}`);
-        setError(`Failed: ${data.error || "Unknown error"}`);
+      const res = await checkPoints(businessId, input.trim());
+      if (res?.points !== undefined) {
+        localStorage.setItem(`loyalty_${businessId}`, input.trim());
+        setLoyaltyId(input.trim());
+        setPoints(res.points);
+        setInput("");
       }
     } catch (err) {
-      addLog(`Create exception: ${err.message}`);
-      setError(`Error: ${err.message}`);
+      setCheckError("ID not found. Please check the number and try again.");
     }
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem(`loyalty_${businessId}`);
+    setLoyaltyId(null);
+    setPoints(null);
+    setInput("");
+  };
+
+  const themeColor = business?.themeColor || "#6366f1";
+
+  if (loading) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.loader}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.errorBox}>{error}</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ 
-      padding: "20px", 
-      fontFamily: "Arial, sans-serif",
-      maxWidth: "600px",
-      margin: "0 auto"
-    }}>
-      <h2>Loyalty Widget Debug</h2>
-      
-      <div style={{ 
-        background: "#f0f0f0", 
-        padding: "10px", 
-        borderRadius: "5px",
-        marginBottom: "20px"
-      }}>
-        <strong>Status:</strong> {status}
-        <br />
-        <strong>Business ID:</strong> {businessId}
+    <div style={styles.container}>
+      {/* Header */}
+      <div style={styles.header}>
+        <h2 style={{ ...styles.title, color: themeColor }}>
+          {business?.name || "Rewards"}
+        </h2>
+        <p style={styles.subtitle}>Your loyalty rewards in one place</p>
       </div>
 
-      {error && (
-        <div style={{ 
-          background: "#ffebee", 
-          color: "#c62828",
-          padding: "10px", 
-          borderRadius: "5px",
-          marginBottom: "20px"
-        }}>
-          ❌ {error}
-        </div>
-      )}
-
-      {loyaltyId ? (
-        <div style={{ 
-          background: "#e8f5e9", 
-          color: "#2e7d32",
-          padding: "15px", 
-          borderRadius: "5px",
-          marginBottom: "20px"
-        }}>
-          <h3>✅ Success!</h3>
-          <p>Your Loyalty ID: <strong style={{ fontSize: "1.5em" }}>{loyaltyId}</strong></p>
-          <button 
-            onClick={() => {
-              localStorage.removeItem("loyaltyId");
-              setLoyaltyId(null);
-              addLog("Logged out");
-            }}
-            style={{
-              background: "#666",
-              color: "white",
-              border: "none",
-              padding: "10px 20px",
-              borderRadius: "5px",
-              cursor: "pointer"
-            }}
-          >
-            Reset
-          </button>
-        </div>
-      ) : (
-        <div>
-          <button 
-            onClick={handleCreateClick}
-            style={{
-              background: "#6366f1",
-              color: "white",
-              border: "none",
-              padding: "15px 30px",
-              fontSize: "16px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              width: "100%"
-            }}
-          >
-            Generate My Loyalty ID
-          </button>
-        </div>
-      )}
-
-      <div style={{ 
-        marginTop: "30px",
-        background: "#fafafa",
-        padding: "15px",
-        borderRadius: "5px",
-        maxHeight: "300px",
-        overflow: "auto"
-      }}>
-        <h4>Debug Logs:</h4>
-        {logs.map((log, i) => (
-          <div key={i} style={{ 
-            fontSize: "12px", 
-            fontFamily: "monospace",
-            padding: "2px 0",
-            borderBottom: "1px solid #eee"
-          }}>
-            {log}
+      {/* Logged in view */}
+      {loyaltyId && (
+        <div style={styles.card}>
+          <div style={styles.idSection}>
+            <span style={styles.label}>Your Loyalty ID</span>
+            <div style={{ ...styles.idDisplay, borderColor: themeColor }}>
+              {loyaltyId}
+            </div>
           </div>
-        ))}
-      </div>
+
+          <div style={styles.pointsSection}>
+            <span style={styles.label}>Current Balance</span>
+            <div style={{ ...styles.pointsDisplay, color: themeColor }}>
+              {points ?? "..."} points
+            </div>
+          </div>
+
+          <div style={styles.info}>
+            💡 Save this ID! Show it at checkout to earn and redeem points.
+          </div>
+
+          <button
+            onClick={handleLogout}
+            style={styles.secondaryButton}
+          >
+            Use Different ID
+          </button>
+        </div>
+      )}
+
+      {/* Not logged in view */}
+      {!loyaltyId && (
+        <div style={styles.card}>
+          {!showEnter ? (
+            <>
+              <div style={styles.welcome}>
+                <h3 style={styles.welcomeTitle}>Get Started</h3>
+                <p style={styles.welcomeText}>
+                  No signup required! Get your 6-digit loyalty ID instantly and start earning rewards.
+                </p>
+              </div>
+
+              <button
+                onClick={handleCreate}
+                style={{ ...styles.primaryButton, backgroundColor: themeColor }}
+              >
+                Generate My Loyalty ID
+              </button>
+
+              <button
+                onClick={() => setShowEnter(true)}
+                style={styles.linkButton}
+              >
+                Already have an ID? Enter it here
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={styles.welcome}>
+                <h3 style={styles.welcomeTitle}>Enter Your ID</h3>
+                <p style={styles.welcomeText}>
+                  Enter your 6-digit loyalty ID to check your balance.
+                </p>
+              </div>
+
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Enter 6-digit ID"
+                style={styles.input}
+                maxLength={6}
+                inputMode="numeric"
+              />
+
+              {checkError && (
+                <div style={styles.errorText}>{checkError}</div>
+              )}
+
+              <button
+                onClick={handleEnter}
+                disabled={input.length !== 6}
+                style={{
+                  ...styles.primaryButton,
+                  backgroundColor: input.length === 6 ? themeColor : "#ccc",
+                }}
+              >
+                Check Balance
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowEnter(false);
+                  setCheckError(null);
+                }}
+                style={styles.linkButton}
+              >
+                Need a new ID?
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+const styles = {
+  container: {
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    padding: "20px",
+    maxWidth: "400px",
+    margin: "0 auto",
+    minHeight: "100vh",
+    backgroundColor: "#f9fafb",
+  },
+  loader: {
+    textAlign: "center",
+    padding: "40px",
+    color: "#666",
+  },
+  errorBox: {
+    background: "#fee",
+    color: "#c00",
+    padding: "15px",
+    borderRadius: "8px",
+    textAlign: "center",
+  },
+  header: {
+    textAlign: "center",
+    marginBottom: "30px",
+  },
+  title: {
+    fontSize: "28px",
+    fontWeight: "bold",
+    margin: "0 0 5px 0",
+  },
+  subtitle: {
+    color: "#666",
+    fontSize: "14px",
+    margin: 0,
+  },
+  card: {
+    background: "white",
+    borderRadius: "16px",
+    padding: "30px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+  },
+  idSection: {
+    marginBottom: "25px",
+  },
+  pointsSection: {
+    marginBottom: "20px",
+  },
+  label: {
+    display: "block",
+    fontSize: "12px",
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    marginBottom: "8px",
+    fontWeight: "600",
+  },
+  idDisplay: {
+    fontSize: "32px",
+    fontWeight: "bold",
+    textAlign: "center",
+    padding: "15px",
+    border: "3px solid",
+    borderRadius: "12px",
+    letterSpacing: "4px",
+  },
+  pointsDisplay: {
+    fontSize: "36px",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  info: {
+    background: "#f0f9ff",
+    padding: "12px",
+    borderRadius: "8px",
+    fontSize: "13px",
+    color: "#0369a1",
+    marginBottom: "20px",
+    lineHeight: "1.5",
+  },
+  welcome: {
+    marginBottom: "25px",
+    textAlign: "center",
+  },
+  welcomeTitle: {
+    fontSize: "20px",
+    margin: "0 0 10px 0",
+  },
+  welcomeText: {
+    color: "#666",
+    fontSize: "14px",
+    lineHeight: "1.6",
+    margin: 0,
+  },
+  input: {
+    width: "100%",
+    padding: "15px",
+    fontSize: "24px",
+    textAlign: "center",
+    border: "2px solid #e5e7eb",
+    borderRadius: "8px",
+    marginBottom: "15px",
+    letterSpacing: "4px",
+    fontWeight: "bold",
+    boxSizing: "border-box",
+  },
+  primaryButton: {
+    width: "100%",
+    padding: "15px",
+    fontSize: "16px",
+    fontWeight: "600",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    marginBottom: "10px",
+  },
+  secondaryButton: {
+    width: "100%",
+    padding: "12px",
+    fontSize: "14px",
+    fontWeight: "500",
+    color: "#666",
+    background: "#f3f4f6",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
+  linkButton: {
+    width: "100%",
+    padding: "10px",
+    fontSize: "14px",
+    color: "#6366f1",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    textDecoration: "underline",
+  },
+  errorText: {
+    color: "#dc2626",
+    fontSize: "13px",
+    marginBottom: "10px",
+    textAlign: "center",
+  },
+};
