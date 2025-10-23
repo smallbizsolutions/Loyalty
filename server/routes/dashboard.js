@@ -6,7 +6,7 @@ const router = express.Router();
 
 /**
  * GET /api/dashboard/stats/:businessId
- * Get business statistics
+ * Get referral statistics
  */
 router.get("/stats/:businessId", async (req, res) => {
   try {
@@ -18,25 +18,29 @@ router.get("/stats/:businessId", async (req, res) => {
       .select("*", { count: "exact", head: true })
       .eq("businessId", businessId);
 
-    // Get total points awarded
-    const { data: transactions } = await supabase
-      .from("transactions")
-      .select("pointsChanged")
+    // Get customers by source
+    const { data: customers } = await supabase
+      .from("customers")
+      .select("source, referred_by_phone")
       .eq("businessId", businessId);
 
-    const totalPointsAwarded = transactions
-      ?.filter(t => t.pointsChanged > 0)
-      .reduce((sum, t) => sum + t.pointsChanged, 0) || 0;
+    const referralCount = customers?.filter(c => c.source === 'referral').length || 0;
+    const directCount = customers?.filter(c => c.source === 'direct').length || 0;
+    const socialCount = customers?.filter(c => c.source === 'social').length || 0;
+    const otherCount = customers?.filter(c => c.source === 'other').length || 0;
 
-    const totalPointsRedeemed = Math.abs(
-      transactions
-        ?.filter(t => t.pointsChanged < 0)
-        .reduce((sum, t) => sum + t.pointsChanged, 0) || 0
-    );
+    // Get top referrers
+    const { data: topReferrers } = await supabase
+      .from("customers")
+      .select("phone, referral_count")
+      .eq("businessId", businessId)
+      .gt("referral_count", 0)
+      .order("referral_count", { ascending: false })
+      .limit(10);
 
-    // Get recent transactions
-    const { data: recentTransactions } = await supabase
-      .from("transactions")
+    // Get recent customers
+    const { data: recentCustomers } = await supabase
+      .from("customers")
       .select("*")
       .eq("businessId", businessId)
       .order("createdAt", { ascending: false })
@@ -44,9 +48,12 @@ router.get("/stats/:businessId", async (req, res) => {
 
     res.json({
       customerCount: customerCount || 0,
-      totalPointsAwarded,
-      totalPointsRedeemed,
-      recentTransactions: recentTransactions || [],
+      referralCount,
+      directCount,
+      socialCount,
+      otherCount,
+      topReferrers: topReferrers || [],
+      recentCustomers: recentCustomers || [],
     });
   } catch (err) {
     console.error("Dashboard stats error:", err);
@@ -56,39 +63,53 @@ router.get("/stats/:businessId", async (req, res) => {
 
 /**
  * POST /api/dashboard/lookup
- * Look up a customer by loyalty ID
+ * Look up a customer and their referral history
  */
 router.post("/lookup", async (req, res) => {
   try {
-    const { businessId, loyaltyId } = req.body;
+    const { businessId, phone } = req.body;
 
-    if (!businessId || !loyaltyId) {
-      return res.status(400).json({ error: "Missing businessId or loyaltyId" });
+    if (!businessId || !phone) {
+      return res.status(400).json({ error: "Missing businessId or phone" });
     }
+
+    const cleanPhone = phone.replace(/\D/g, '');
 
     const { data: customer, error } = await supabase
       .from("customers")
       .select("*")
       .eq("businessId", businessId)
-      .eq("loyaltyId", loyaltyId)
+      .eq("phone", cleanPhone)
       .single();
 
     if (error || !customer) {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    // Get transaction history
-    const { data: transactions } = await supabase
-      .from("transactions")
-      .select("*")
+    // Get who they referred
+    const { data: referrals } = await supabase
+      .from("customers")
+      .select("phone, createdAt, source")
       .eq("businessId", businessId)
-      .eq("loyaltyId", loyaltyId)
-      .order("createdAt", { ascending: false })
-      .limit(20);
+      .eq("referred_by_phone", cleanPhone)
+      .order("createdAt", { ascending: false });
+
+    // Get who referred them
+    let referredByInfo = null;
+    if (customer.referred_by_phone) {
+      const { data: referrer } = await supabase
+        .from("customers")
+        .select("phone")
+        .eq("businessId", businessId)
+        .eq("phone", customer.referred_by_phone)
+        .single();
+      referredByInfo = referrer;
+    }
 
     res.json({
       customer,
-      transactions: transactions || [],
+      referrals: referrals || [],
+      referredBy: referredByInfo,
     });
   } catch (err) {
     console.error("Customer lookup error:", err);
