@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import businessRoutes from "./routes/business.js";
 import loyaltyRoutes from "./routes/loyalty.js";
 import transactionRoutes from "./routes/transactions.js";
+import dashboardRoutes from "./routes/dashboard.js";
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.get("/health", (req, res) => {
 app.use("/api/business", businessRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
 app.use("/api/loyalty", transactionRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // --- Serve Frontend ---
 const __filename = fileURLToPath(import.meta.url);
