@@ -1,3 +1,4 @@
+// server/index.js
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -5,7 +6,7 @@ import { fileURLToPath } from "url";
 
 import businessRoutes from "./routes/business.js";
 import loyaltyRoutes from "./routes/loyalty.js";
-import transactionRoutes from "./routes/transactions.js"; // NEW
+import transactionRoutes from "./routes/transactions.js";
 
 const app = express();
 
@@ -16,22 +17,15 @@ app.use(express.json());
 // --- API Routes ---
 app.use("/api/business", businessRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
-app.use("/api/loyalty", transactionRoutes); // transaction + redeem endpoints
+app.use("/api/loyalty", transactionRoutes); // automatic earn/redeem routes
 
-// --- Serve Frontend (Vite Build) ---
+// --- Serve Frontend ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.join(__dirname, "../dist");
 
 app.use(express.static(distPath));
+app.get("*", (_, res) => res.sendFile(path.join(distPath, "index.html")));
 
-// Fallback route for React (SPA)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(distPath, "index.html"));
-});
-
-// --- Server Start ---
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
