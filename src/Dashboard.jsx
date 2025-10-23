@@ -556,4 +556,18 @@ const styles = {
     borderRadius: "12px",
     boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
   },
-  footerText:
+  footerText: {
+    fontSize: "14px",
+    color: "#666",
+    marginBottom: "10px",
+  },
+  code: {
+    display: "block",
+    padding: "12px",
+    background: "#f3f4f6",
+    borderRadius: "8px",
+    fontSize: "14px",
+    fontFamily: "monospace",
+    wordBreak: "break-all",
+  },
+};
