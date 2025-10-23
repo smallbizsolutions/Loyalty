@@ -15,7 +15,6 @@ export default function App({ businessId }) {
   // Load business info
   useEffect(() => {
     if (!businessId) {
-      setError("No businessId provided in URL. Add ?businessId=YOUR_ID to the URL");
       setLoading(false);
       return;
     }
