@@ -4,10 +4,7 @@ import { supabase } from "../supabase.js";
 
 const router = express.Router();
 
-/**
- * POST /api/loyalty/create
- * Creates a new anonymous loyalty record for a business
- */
+// Create a new anonymous customer
 router.post("/create", async (req, res) => {
   const { businessId } = req.body;
   if (!businessId) return res.status(400).json({ error: "Missing businessId" });
@@ -23,10 +20,7 @@ router.post("/create", async (req, res) => {
   res.json({ loyaltyId });
 });
 
-/**
- * POST /api/loyalty/check
- * Returns the current points for a loyaltyId
- */
+// Check customer points
 router.post("/check", async (req, res) => {
   const { businessId, loyaltyId } = req.body;
   if (!businessId || !loyaltyId)
@@ -40,7 +34,7 @@ router.post("/check", async (req, res) => {
     .single();
 
   if (error) return res.status(400).json({ error: error.message });
-  if (!data) return res.status(404).json({ error: "Not found" });
+  if (!data) return res.status(404).json({ error: "Customer not found" });
 
   res.json({ points: data.points });
 });
