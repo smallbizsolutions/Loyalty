@@ -6,89 +6,95 @@ import { fetchBusinessInfo, checkPoints } from "./utils/api.js";
 
 export default function App({ businessId }) {
   const [business, setBusiness] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [loyaltyId, setLoyaltyId] = useState(localStorage.getItem("loyaltyId"));
   const [points, setPoints] = useState(null);
   const [showEnterExisting, setShowEnterExisting] = useState(false);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  // Load business info
+  // Fetch business info
   useEffect(() => {
-    if (!businessId) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    fetchBusinessInfo(businessId)
-      .then((data) => {
+    async function loadBusiness() {
+      try {
+        const data = await fetchBusinessInfo(businessId);
         setBusiness(data);
-        setError(null);
-      })
-      .catch((err) => {
-        console.error("Error fetching business:", err);
-        setError(`Failed to load business info: ${err.message}`);
-      })
-      .finally(() => setLoading(false));
+      } catch (err) {
+        setError(err.message || "Failed to load business");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadBusiness();
   }, [businessId]);
 
-  // Automatically check points if ID exists
+  // Fetch points if a loyalty ID already exists
   useEffect(() => {
-    if (loyaltyId && !points && businessId) {
-      checkPoints(businessId, loyaltyId).then((res) => {
-        if (res?.points !== undefined) setPoints(res.points);
-      }).catch(console.error);
+    async function loadPoints() {
+      if (loyaltyId) {
+        try {
+          const res = await checkPoints(businessId, loyaltyId);
+          if (res?.points !== undefined) setPoints(res.points);
+        } catch {
+          console.warn("No points found for loyaltyId:", loyaltyId);
+        }
+      }
     }
-  }, [loyaltyId, points, businessId]);
+    loadPoints();
+  }, [businessId, loyaltyId]);
 
   const handleLogout = () => {
     localStorage.removeItem("loyaltyId");
     setLoyaltyId(null);
     setPoints(null);
+    setShowEnterExisting(false);
   };
+
+  // --- UI RENDER ---
+  if (loading) {
+    return (
+      <div className="widget">
+        <p>Loading business...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="widget">
+        <h3>Error loading business</h3>
+        <p>{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="widget">
-      <h3>{business?.name || "Loyalty"} Rewards</h3>
+      {business && <h3>{business.name} Rewards</h3>}
 
-      {/* Debug Info - showing state */}
-      <div style={{ background: "#f0f0f0", padding: "8px", fontSize: "0.8em", marginBottom: "12px", textAlign: "left" }}>
-        <div>Loading: {loading ? "YES" : "NO"}</div>
-        <div>Error: {error || "none"}</div>
-        <div>LoyaltyId: {loyaltyId || "none"}</div>
-        <div>Points: {points !== null ? points : "null"}</div>
-        <div>Show Enter: {showEnterExisting ? "YES" : "NO"}</div>
-      </div>
-
-      {/* Debug Info */}
-      {error && (
-        <div style={{ background: "#fee", padding: "12px", borderRadius: "6px", marginBottom: "12px", fontSize: "0.9em" }}>
-          <strong>Error:</strong> {error}
-          <br />
-          <small>BusinessId: {businessId || "missing"}</small>
-        </div>
-      )}
-
-      {loading && <p>Loading...</p>}
-
-      {!loading && !error && !loyaltyId && !showEnterExisting && (
-        <div style={{ marginTop: "20px" }}>
-          <p style={{ marginBottom: "16px" }}>No signups or personal info needed.</p>
+      {!loyaltyId && !showEnterExisting && (
+        <>
+          <p>No signups or personal info needed.</p>
           <CreateId
             businessId={businessId}
             onCreate={setLoyaltyId}
             onShowEnter={() => setShowEnterExisting(true)}
           />
           <button
-            style={{ marginTop: "12px", background: "transparent", color: "#6366f1", border: "none", cursor: "pointer", textDecoration: "underline" }}
+            style={{
+              marginTop: "12px",
+              background: "transparent",
+              color: "#6366f1",
+              border: "none",
+              cursor: "pointer",
+            }}
             onClick={() => setShowEnterExisting(true)}
           >
             Already have a Loyalty ID?
           </button>
-        </div>
+        </>
       )}
 
-      {!loading && !error && !loyaltyId && showEnterExisting && (
+      {!loyaltyId && showEnterExisting && (
         <>
           <EnterId
             businessId={businessId}
@@ -96,7 +102,13 @@ export default function App({ businessId }) {
             setPoints={setPoints}
           />
           <button
-            style={{ marginTop: "12px", background: "transparent", color: "#6366f1", border: "none", cursor: "pointer" }}
+            style={{
+              marginTop: "12px",
+              background: "transparent",
+              color: "#6366f1",
+              border: "none",
+              cursor: "pointer",
+            }}
             onClick={() => setShowEnterExisting(false)}
           >
             Need a new Loyalty ID?
@@ -104,8 +116,12 @@ export default function App({ businessId }) {
         </>
       )}
 
-      {!loading && !error && loyaltyId && points !== null && (
-        <LoyaltyCard loyaltyId={loyaltyId} points={points} onLogout={handleLogout} />
+      {loyaltyId && points !== null && (
+        <LoyaltyCard
+          loyaltyId={loyaltyId}
+          points={points}
+          onLogout={handleLogout}
+        />
       )}
     </div>
   );
