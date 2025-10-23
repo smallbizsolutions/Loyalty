@@ -1,30 +1,35 @@
 import React, { useEffect, useState } from "react";
-import { fetchBusinessInfo, createLoyaltyId, checkPoints } from "./utils/api.js";
+import { fetchBusinessInfo, registerCustomer, checkCustomer, getCustomers } from "./utils/api.js";
 
 export default function App({ businessId }) {
   const [business, setBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [loyaltyId, setLoyaltyId] = useState(localStorage.getItem(`loyalty_${businessId}`));
-  const [points, setPoints] = useState(null);
-  const [showEnter, setShowEnter] = useState(false);
+  const [phone, setPhone] = useState(localStorage.getItem(`referral_phone_${businessId}`));
+  const [customerData, setCustomerData] = useState(null);
+  const [showRegister, setShowRegister] = useState(!phone);
   const [input, setInput] = useState("");
-  const [checkError, setCheckError] = useState(null);
+  const [referrerPhone, setReferrerPhone] = useState("");
+  const [source, setSource] = useState("direct");
+  const [customers, setCustomers] = useState([]);
+  const [message, setMessage] = useState(null);
   const [isWidget, setIsWidget] = useState(false);
 
-  // Check if we're in widget mode (iframe)
   useEffect(() => {
     setIsWidget(window.self !== window.top);
   }, []);
 
-  // Load business info
   useEffect(() => {
     async function loadBusiness() {
       try {
         const data = await fetchBusinessInfo(businessId);
         setBusiness(data);
+        
+        // Load customer list for referral dropdown
+        const custData = await getCustomers(businessId);
+        setCustomers(custData.customers || []);
       } catch (err) {
-        setError("Business not found. Please check your URL.");
+        setError("Business not found");
       } finally {
         setLoading(false);
       }
@@ -32,200 +37,231 @@ export default function App({ businessId }) {
     loadBusiness();
   }, [businessId]);
 
-  // If loyalty ID exists, load their points
   useEffect(() => {
-    async function loadPoints() {
-      if (!loyaltyId) return;
+    async function loadCustomer() {
+      if (!phone) return;
       try {
-        const data = await checkPoints(businessId, loyaltyId);
-        if (data?.points !== undefined) setPoints(data.points);
+        const data = await checkCustomer(businessId, phone);
+        setCustomerData(data);
       } catch (err) {
-        console.error("Failed to load points:", err);
+        console.error("Failed to load customer:", err);
       }
     }
-    loadPoints();
-  }, [businessId, loyaltyId]);
+    loadCustomer();
+  }, [businessId, phone]);
 
-  // Create new ID
-  const handleCreate = async () => {
+  const handleRegister = async () => {
+    if (!input.trim()) return;
+    setMessage(null);
     try {
-      const res = await createLoyaltyId(businessId);
-      if (res?.loyaltyId) {
-        localStorage.setItem(`loyalty_${businessId}`, res.loyaltyId);
-        setLoyaltyId(res.loyaltyId);
-        setPoints(0);
+      const res = await registerCustomer(
+        businessId, 
+        input.trim(), 
+        source === 'referral' ? referrerPhone : null,
+        source
+      );
+      
+      localStorage.setItem(`referral_phone_${businessId}`, res.phone);
+      setPhone(res.phone);
+      setCustomerData({ phone: res.phone, referralCount: 0, referrals: [] });
+      setInput("");
+      setShowRegister(false);
+      
+      if (res.wasReferred) {
+        setMessage({ type: "success", text: "Thanks for joining! Your friend will get credit for referring you! 🎉" });
+      } else {
+        setMessage({ type: "success", text: "Welcome! Start referring friends to earn rewards! 🎁" });
       }
     } catch (err) {
-      setError("Failed to create loyalty ID. Please try again.");
+      setMessage({ type: "error", text: err.message });
     }
   };
 
-  // Enter existing ID
-  const handleEnter = async () => {
+  const handleCheck = async () => {
     if (!input.trim()) return;
-    setCheckError(null);
+    setMessage(null);
     try {
-      const res = await checkPoints(businessId, input.trim());
-      if (res?.points !== undefined) {
-        localStorage.setItem(`loyalty_${businessId}`, input.trim());
-        setLoyaltyId(input.trim());
-        setPoints(res.points);
-        setInput("");
-      }
+      const res = await checkCustomer(businessId, input.trim());
+      localStorage.setItem(`referral_phone_${businessId}`, input.trim());
+      setPhone(input.trim());
+      setCustomerData(res);
+      setInput("");
+      setShowRegister(false);
     } catch (err) {
-      setCheckError("ID not found. Please check the number and try again.");
+      setMessage({ type: "error", text: "Phone not found. Try registering instead!" });
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(`loyalty_${businessId}`);
-    setLoyaltyId(null);
-    setPoints(null);
+    localStorage.removeItem(`referral_phone_${businessId}`);
+    setPhone(null);
+    setCustomerData(null);
     setInput("");
+    setShowRegister(true);
   };
 
   const handleClose = () => {
-    // Send message to parent window to close widget
     if (isWidget) {
       window.parent.postMessage("close-widget", "*");
     }
   };
 
+  const formatPhone = (val) => {
+    const cleaned = val.replace(/\D/g, '');
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+  };
+
   const themeColor = business?.themeColor || "#6366f1";
 
   if (loading) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.loader}>Loading...</div>
-      </div>
-    );
+    return <div style={styles.container}><div style={styles.loader}>Loading...</div></div>;
   }
 
-  if (error) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.errorBox}>{error}</div>
-      </div>
-    );
+  if (error && !phone) {
+    return <div style={styles.container}><div style={styles.errorBox}>{error}</div></div>;
   }
 
   return (
     <div style={styles.container}>
-      {/* Close button for widget mode */}
       {isWidget && (
-        <button onClick={handleClose} style={styles.closeButton}>
-          ✕
-        </button>
+        <button onClick={handleClose} style={styles.closeButton}>✕</button>
       )}
 
-      {/* Header */}
       <div style={styles.header}>
         <h2 style={{ ...styles.title, color: themeColor }}>
-          {business?.name || "Rewards"}
+          {business?.name || "Referral Program"}
         </h2>
-        <p style={styles.subtitle}>Your loyalty rewards in one place</p>
+        <p style={styles.subtitle}>Refer friends and earn rewards</p>
       </div>
 
-      {/* Logged in view */}
-      {loyaltyId && (
+      {message && (
+        <div style={{
+          ...styles.message,
+          backgroundColor: message.type === "success" ? "#d1fae5" : "#fee2e2",
+          color: message.type === "success" ? "#065f46" : "#991b1b",
+        }}>
+          {message.text}
+        </div>
+      )}
+
+      {phone && customerData && (
         <div style={styles.card}>
-          <div style={styles.idSection}>
-            <span style={styles.label}>Your Loyalty ID</span>
-            <div style={{ ...styles.idDisplay, borderColor: themeColor }}>
-              {loyaltyId}
+          <div style={styles.section}>
+            <span style={styles.label}>Your Phone Number</span>
+            <div style={{ ...styles.display, borderColor: themeColor }}>
+              {formatPhone(phone)}
             </div>
           </div>
 
-          <div style={styles.pointsSection}>
-            <span style={styles.label}>Current Balance</span>
-            <div style={{ ...styles.pointsDisplay, color: themeColor }}>
-              {points ?? "..."} points
+          <div style={styles.section}>
+            <span style={styles.label}>Friends You've Referred</span>
+            <div style={{ ...styles.bigNumber, color: themeColor }}>
+              {customerData.referralCount || 0}
             </div>
           </div>
+
+          {customerData.referrals && customerData.referrals.length > 0 && (
+            <div style={styles.referralList}>
+              <p style={styles.listTitle}>Recent Referrals:</p>
+              {customerData.referrals.slice(0, 5).map((ref, idx) => (
+                <div key={idx} style={styles.referralItem}>
+                  <span>{formatPhone(ref.phone)}</span>
+                  <span style={styles.date}>{new Date(ref.createdAt).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div style={styles.info}>
-            💡 Save this ID! Show it at checkout to earn and redeem points.
+            🎁 Refer {business?.referrals_needed_for_reward || 3} friends and get ${business?.referral_reward_amount || 10} off your next visit!
           </div>
 
-          <button
-            onClick={handleLogout}
-            style={styles.secondaryButton}
-          >
-            Use Different ID
+          <button onClick={handleLogout} style={styles.secondaryButton}>
+            Use Different Number
           </button>
         </div>
       )}
 
-      {/* Not logged in view */}
-      {!loyaltyId && (
+      {!phone && (
         <div style={styles.card}>
-          {!showEnter ? (
+          <div style={styles.welcome}>
+            <h3 style={styles.welcomeTitle}>
+              {showRegister ? "Join Our Referral Program" : "Check Your Referrals"}
+            </h3>
+            <p style={styles.welcomeText}>
+              {showRegister 
+                ? "Enter your phone number to start earning rewards for referring friends!"
+                : "Enter your phone number to see how many friends you've referred."}
+            </p>
+          </div>
+
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            placeholder="(555) 123-4567"
+            style={styles.input}
+            maxLength={14}
+            inputMode="numeric"
+            type="tel"
+          />
+
+          {showRegister && (
             <>
-              <div style={styles.welcome}>
-                <h3 style={styles.welcomeTitle}>Get Started</h3>
-                <p style={styles.welcomeText}>
-                  No signup required! Get your 6-digit loyalty ID instantly and start earning rewards.
-                </p>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>How did you hear about us?</label>
+                <select 
+                  value={source} 
+                  onChange={(e) => setSource(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="direct">Found you myself</option>
+                  <option value="referral">Referred by a friend</option>
+                  <option value="social">Social media</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
 
-              <button
-                onClick={handleCreate}
-                style={{ ...styles.primaryButton, backgroundColor: themeColor }}
-              >
-                Generate My Loyalty ID
-              </button>
-
-              <button
-                onClick={() => setShowEnter(true)}
-                style={styles.linkButton}
-              >
-                Already have an ID? Enter it here
-              </button>
-            </>
-          ) : (
-            <>
-              <div style={styles.welcome}>
-                <h3 style={styles.welcomeTitle}>Enter Your ID</h3>
-                <p style={styles.welcomeText}>
-                  Enter your 6-digit loyalty ID to check your balance.
-                </p>
-              </div>
-
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="Enter 6-digit ID"
-                style={styles.input}
-                maxLength={6}
-                inputMode="numeric"
-              />
-
-              {checkError && (
-                <div style={styles.errorText}>{checkError}</div>
+              {source === 'referral' && (
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Friend's Phone Number</label>
+                  <input
+                    value={referrerPhone}
+                    onChange={(e) => setReferrerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="(555) 123-4567"
+                    style={styles.input}
+                    maxLength={14}
+                    inputMode="numeric"
+                    type="tel"
+                  />
+                </div>
               )}
-
-              <button
-                onClick={handleEnter}
-                disabled={input.length !== 6}
-                style={{
-                  ...styles.primaryButton,
-                  backgroundColor: input.length === 6 ? themeColor : "#ccc",
-                }}
-              >
-                Check Balance
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowEnter(false);
-                  setCheckError(null);
-                }}
-                style={styles.linkButton}
-              >
-                Need a new ID?
-              </button>
             </>
           )}
+
+          <button
+            onClick={showRegister ? handleRegister : handleCheck}
+            disabled={input.replace(/\D/g, '').length !== 10 || (showRegister && source === 'referral' && referrerPhone.replace(/\D/g, '').length !== 10)}
+            style={{
+              ...styles.primaryButton,
+              backgroundColor: (input.replace(/\D/g, '').length === 10 && 
+                             (source !== 'referral' || referrerPhone.replace(/\D/g, '').length === 10)) 
+                             ? themeColor : "#ccc",
+            }}
+          >
+            {showRegister ? "Join Now" : "Check My Referrals"}
+          </button>
+
+          <button
+            onClick={() => {
+              setShowRegister(!showRegister);
+              setMessage(null);
+            }}
+            style={styles.linkButton}
+          >
+            {showRegister ? "Already a member? Check referrals" : "New here? Join now"}
+          </button>
         </div>
       )}
     </div>
@@ -252,7 +288,6 @@ const styles = {
     color: "#666",
     cursor: "pointer",
     padding: "8px",
-    lineHeight: "1",
     zIndex: "10",
   },
   loader: {
@@ -281,17 +316,22 @@ const styles = {
     fontSize: "14px",
     margin: 0,
   },
+  message: {
+    padding: "15px",
+    borderRadius: "8px",
+    marginBottom: "20px",
+    fontSize: "14px",
+    fontWeight: "500",
+    textAlign: "center",
+  },
   card: {
     background: "white",
     borderRadius: "16px",
     padding: "30px",
     boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
   },
-  idSection: {
+  section: {
     marginBottom: "25px",
-  },
-  pointsSection: {
-    marginBottom: "20px",
   },
   label: {
     display: "block",
@@ -302,19 +342,41 @@ const styles = {
     marginBottom: "8px",
     fontWeight: "600",
   },
-  idDisplay: {
-    fontSize: "32px",
+  display: {
+    fontSize: "24px",
     fontWeight: "bold",
     textAlign: "center",
     padding: "15px",
     border: "3px solid",
     borderRadius: "12px",
-    letterSpacing: "4px",
   },
-  pointsDisplay: {
-    fontSize: "36px",
+  bigNumber: {
+    fontSize: "48px",
     fontWeight: "bold",
     textAlign: "center",
+  },
+  referralList: {
+    marginTop: "20px",
+    marginBottom: "20px",
+  },
+  listTitle: {
+    fontSize: "14px",
+    fontWeight: "600",
+    marginBottom: "10px",
+    color: "#374151",
+  },
+  referralItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "10px",
+    background: "#f9fafb",
+    borderRadius: "8px",
+    marginBottom: "8px",
+    fontSize: "14px",
+  },
+  date: {
+    color: "#666",
+    fontSize: "12px",
   },
   info: {
     background: "#f0f9ff",
@@ -324,6 +386,7 @@ const styles = {
     color: "#0369a1",
     marginBottom: "20px",
     lineHeight: "1.5",
+    textAlign: "center",
   },
   welcome: {
     marginBottom: "25px",
@@ -339,54 +402,22 @@ const styles = {
     lineHeight: "1.6",
     margin: 0,
   },
+  formGroup: {
+    marginBottom: "15px",
+  },
+  formLabel: {
+    display: "block",
+    fontSize: "14px",
+    fontWeight: "600",
+    marginBottom: "8px",
+    color: "#374151",
+  },
   input: {
     width: "100%",
     padding: "15px",
-    fontSize: "24px",
+    fontSize: "20px",
     textAlign: "center",
     border: "2px solid #e5e7eb",
     borderRadius: "8px",
     marginBottom: "15px",
-    letterSpacing: "4px",
-    fontWeight: "bold",
-    boxSizing: "border-box",
-  },
-  primaryButton: {
-    width: "100%",
-    padding: "15px",
-    fontSize: "16px",
-    fontWeight: "600",
-    color: "white",
-    border: "none",
-    borderRadius: "8px",
-    cursor: "pointer",
-    marginBottom: "10px",
-  },
-  secondaryButton: {
-    width: "100%",
-    padding: "12px",
-    fontSize: "14px",
-    fontWeight: "500",
-    color: "#666",
-    background: "#f3f4f6",
-    border: "none",
-    borderRadius: "8px",
-    cursor: "pointer",
-  },
-  linkButton: {
-    width: "100%",
-    padding: "10px",
-    fontSize: "14px",
-    color: "#6366f1",
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    textDecoration: "underline",
-  },
-  errorText: {
-    color: "#dc2626",
-    fontSize: "13px",
-    marginBottom: "10px",
-    textAlign: "center",
-  },
-};
+    fontWeight
