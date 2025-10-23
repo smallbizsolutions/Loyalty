@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "https://yourapi.com/api";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 export async function fetchBusinessInfo(businessId) {
   const res = await fetch(`${API_URL}/business/${businessId}`);
