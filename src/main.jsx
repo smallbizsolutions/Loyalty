@@ -1,22 +1,23 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
+import Dashboard from "./Dashboard.jsx";
 import "./styles/widget.css";
 
-// Get businessId from URL parameters
+// Get URL parameters
 const urlParams = new URLSearchParams(window.location.search);
-let businessId = urlParams.get("businessId");
-
-// If no businessId provided in URL, use your test business ID
-if (!businessId) {
-  businessId = "abc123"; // Using Test Coffee Co.
-  console.warn("No businessId found in URL. Using default:", businessId);
-}
+const businessId = urlParams.get("businessId") || "abc123";
+const isDashboard = window.location.pathname.includes("/dashboard");
 
 console.log("App starting with businessId:", businessId);
+console.log("Mode:", isDashboard ? "Dashboard" : "Customer Widget");
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App businessId={businessId} />
+    {isDashboard ? (
+      <Dashboard businessId={businessId} />
+    ) : (
+      <App businessId={businessId} />
+    )}
   </React.StrictMode>
 );
