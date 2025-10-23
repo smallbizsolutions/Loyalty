@@ -13,7 +13,10 @@ export async function createLoyaltyId(businessId) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ businessId }),
   });
-  if (!res.ok) throw new Error("Failed to create loyalty ID");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to create loyalty ID: ${text}`);
+  }
   return res.json();
 }
 
