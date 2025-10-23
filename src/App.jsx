@@ -10,6 +10,12 @@ export default function App({ businessId }) {
   const [showEnter, setShowEnter] = useState(false);
   const [input, setInput] = useState("");
   const [checkError, setCheckError] = useState(null);
+  const [isWidget, setIsWidget] = useState(false);
+
+  // Check if we're in widget mode (iframe)
+  useEffect(() => {
+    setIsWidget(window.self !== window.top);
+  }, []);
 
   // Load business info
   useEffect(() => {
@@ -78,6 +84,13 @@ export default function App({ businessId }) {
     setInput("");
   };
 
+  const handleClose = () => {
+    // Send message to parent window to close widget
+    if (isWidget) {
+      window.parent.postMessage("close-widget", "*");
+    }
+  };
+
   const themeColor = business?.themeColor || "#6366f1";
 
   if (loading) {
@@ -98,6 +111,13 @@ export default function App({ businessId }) {
 
   return (
     <div style={styles.container}>
+      {/* Close button for widget mode */}
+      {isWidget && (
+        <button onClick={handleClose} style={styles.closeButton}>
+          ✕
+        </button>
+      )}
+
       {/* Header */}
       <div style={styles.header}>
         <h2 style={{ ...styles.title, color: themeColor }}>
@@ -220,6 +240,20 @@ const styles = {
     margin: "0 auto",
     minHeight: "100vh",
     backgroundColor: "#f9fafb",
+    position: "relative",
+  },
+  closeButton: {
+    position: "absolute",
+    top: "10px",
+    right: "10px",
+    background: "transparent",
+    border: "none",
+    fontSize: "24px",
+    color: "#666",
+    cursor: "pointer",
+    padding: "8px",
+    lineHeight: "1",
+    zIndex: "10",
   },
   loader: {
     textAlign: "center",
