@@ -1,170 +1,81 @@
+// server/routes/transactions.js
 import express from "express";
 import { supabase } from "../supabase.js";
 
 const router = express.Router();
 
 /**
- * POST /api/loyalty/transaction
- * Called when a purchase happens at checkout
- * Body: { businessId, loyaltyId, amountSpent }
+ * POST /api/loyalty/reward
+ * Give a reward/bonus to a customer for referrals
  */
-router.post("/transaction", async (req, res) => {
-  console.log("\n=== TRANSACTION (EARN POINTS) ===");
-  console.log("Body:", req.body);
-
+router.post("/reward", async (req, res) => {
+  console.log("\n=== GIVE REWARD ===");
+  
   try {
-    const { businessId, loyaltyId, amountSpent } = req.body;
+    const { businessId, phone, rewardAmount, note } = req.body;
     
-    if (!businessId || !loyaltyId || amountSpent === undefined) {
-      return res.status(400).json({ error: "Missing required fields: businessId, loyaltyId, amountSpent" });
+    if (!businessId || !phone || !rewardAmount) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Get business conversion rate
-    const { data: business, error: bErr } = await supabase
-      .from("businesses")
-      .select("pointsPerDollar")
-      .eq("id", businessId)
-      .single();
+    const cleanPhone = phone.replace(/\D/g, '');
 
-    if (bErr || !business) {
-      console.error("Business not found:", bErr);
-      return res.status(404).json({ error: "Business not found" });
-    }
-
-    // Calculate points to add
-    const pointsToAdd = Math.floor(amountSpent * business.pointsPerDollar);
-    console.log(`Adding ${pointsToAdd} points for $${amountSpent} (rate: ${business.pointsPerDollar} pts/$)`);
-
-    // Update customer balance
-    const { error: adjErr } = await supabase.rpc("adjust_points", {
-      p_business: businessId,
-      p_loyalty: loyaltyId,
-      p_change: pointsToAdd,
-    });
-
-    if (adjErr) {
-      console.error("Failed to adjust points:", adjErr);
-      return res.status(400).json({ error: adjErr.message });
-    }
-
-    // Log transaction
-    await supabase.from("transactions").insert({
-      businessId,
-      loyaltyId,
-      type: "earn",
-      amountSpent,
-      pointsChanged: pointsToAdd,
-    });
-
-    console.log(`✅ Transaction complete: +${pointsToAdd} points`);
-    res.json({ 
-      success: true, 
-      pointsAdded: pointsToAdd,
-      message: `Earned ${pointsToAdd} points!`
-    });
-
-  } catch (err) {
-    console.error("Transaction error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * POST /api/loyalty/redeem
- * Called when customer redeems points for a reward
- * Body: { businessId, loyaltyId, pointsToRedeem }
- */
-router.post("/redeem", async (req, res) => {
-  console.log("\n=== REDEEM POINTS ===");
-  console.log("Body:", req.body);
-
-  try {
-    const { businessId, loyaltyId, pointsToRedeem } = req.body;
-    
-    if (!businessId || !loyaltyId || !pointsToRedeem) {
-      return res.status(400).json({ error: "Missing required fields: businessId, loyaltyId, pointsToRedeem" });
-    }
-
-    // Check if customer has enough points
+    // Verify customer exists
     const { data: customer, error: custErr } = await supabase
       .from("customers")
-      .select("points")
+      .select("*")
       .eq("businessId", businessId)
-      .eq("loyaltyId", loyaltyId)
+      .eq("phone", cleanPhone)
       .single();
 
     if (custErr || !customer) {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    if (customer.points < pointsToRedeem) {
-      return res.status(400).json({ 
-        error: "Insufficient points",
-        available: customer.points,
-        requested: pointsToRedeem
-      });
-    }
-
-    // Deduct points
-    const negativePoints = -Math.abs(pointsToRedeem);
-    const { error: adjErr } = await supabase.rpc("adjust_points", {
-      p_business: businessId,
-      p_loyalty: loyaltyId,
-      p_change: negativePoints,
-    });
-
-    if (adjErr) {
-      console.error("Failed to redeem points:", adjErr);
-      return res.status(400).json({ error: adjErr.message });
-    }
-
-    // Log transaction
+    // Log the reward
     await supabase.from("transactions").insert({
       businessId,
-      loyaltyId,
-      type: "redeem",
+      phone: cleanPhone,
+      type: "reward",
       amountSpent: 0,
-      pointsChanged: negativePoints,
+      pointsChanged: 0,
+      referral_bonus: rewardAmount,
     });
 
-    console.log(`✅ Redeemed ${pointsToRedeem} points`);
     res.json({ 
-      success: true, 
-      pointsRedeemed: pointsToRedeem,
-      remainingPoints: customer.points + negativePoints,
-      message: `Redeemed ${pointsToRedeem} points!`
+      success: true,
+      message: `Rewarded $${rewardAmount} for referrals!`
     });
 
   } catch (err) {
-    console.error("Redeem error:", err);
+    console.error("Reward error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 /**
- * GET /api/loyalty/transactions/:businessId/:loyaltyId
- * Get transaction history for a customer
+ * GET /api/loyalty/transactions/:businessId/:phone
+ * Get reward history
  */
-router.get("/transactions/:businessId/:loyaltyId", async (req, res) => {
+router.get("/transactions/:businessId/:phone", async (req, res) => {
   try {
-    const { businessId, loyaltyId } = req.params;
+    const { businessId, phone } = req.params;
+    const cleanPhone = phone.replace(/\D/g, '');
 
     const { data, error } = await supabase
       .from("transactions")
       .select("*")
       .eq("businessId", businessId)
-      .eq("loyaltyId", loyaltyId)
+      .eq("phone", cleanPhone)
       .order("createdAt", { ascending: false })
       .limit(50);
 
     if (error) {
-      console.error("Failed to fetch transactions:", error);
       return res.status(400).json({ error: error.message });
     }
 
-    res.json({ transactions: data });
+    res.json({ transactions: data || [] });
   } catch (err) {
-    console.error("Transaction history error:", err);
     res.status(500).json({ error: err.message });
   }
 });
