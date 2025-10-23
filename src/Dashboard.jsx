@@ -264,3 +264,363 @@ export default function Dashboard({ businessId }) {
                     <span style={styles.detailLabel}>Referred By:</span>
                     <span style={styles.detailValue}>{formatPhone(customerData.referredBy.phone)}</span>
                   </div>
+                )}
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Customer Since:</span>
+                  <span style={styles.detailValue}>
+                    {new Date(customerData.customer.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+
+                {customerData.referrals && customerData.referrals.length > 0 && (
+                  <>
+                    <h3 style={styles.sectionTitle}>People They Referred</h3>
+                    <div style={styles.referralsList}>
+                      {customerData.referrals.map((ref, idx) => (
+                        <div key={idx} style={styles.referralItem}>
+                          <span>{formatPhone(ref.phone)}</span>
+                          <span style={styles.referralDate}>
+                            {new Date(ref.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "reward" && (
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>Give Referral Reward</h2>
+            <p style={styles.cardDescription}>
+              Reward customers for successful referrals. Default: ${business?.referral_reward_amount || 10} after {business?.referrals_needed_for_reward || 3} referrals.
+            </p>
+            <form onSubmit={handleGiveReward}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Phone Number</label>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="(555) 123-4567"
+                  required
+                  maxLength={14}
+                  style={styles.input}
+                  inputMode="numeric"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Reward Amount ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={rewardAmount}
+                  onChange={(e) => setRewardAmount(e.target.value)}
+                  placeholder="10.00"
+                  required
+                  min="0"
+                  style={styles.input}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={phone.replace(/\D/g, '').length !== 10 || !rewardAmount}
+                style={{
+                  ...styles.button,
+                  backgroundColor: (phone.replace(/\D/g, '').length === 10 && rewardAmount) ? themeColor : "#d1d5db",
+                }}
+              >
+                Give ${rewardAmount || '0'} Reward
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={styles.footer}>
+        <p style={styles.footerText}>Customer Widget URL:</p>
+        <code style={styles.code}>
+          {window.location.origin}?businessId={businessId}
+        </code>
+        <p style={styles.footerSubtext}>Embed this on your website so customers can check their referral status</p>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    padding: "20px",
+    maxWidth: "1200px",
+    margin: "0 auto",
+    backgroundColor: "#f9fafb",
+    minHeight: "100vh",
+  },
+  loader: {
+    textAlign: "center",
+    padding: "40px",
+    color: "#666",
+  },
+  header: {
+    textAlign: "center",
+    marginBottom: "30px",
+  },
+  title: {
+    fontSize: "32px",
+    fontWeight: "bold",
+    margin: "0 0 5px 0",
+  },
+  subtitle: {
+    color: "#666",
+    fontSize: "16px",
+    margin: 0,
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "20px",
+    marginBottom: "30px",
+  },
+  statCard: {
+    background: "white",
+    padding: "24px",
+    borderRadius: "12px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    textAlign: "center",
+  },
+  statValue: {
+    fontSize: "36px",
+    fontWeight: "bold",
+    color: "#6366f1",
+    marginBottom: "8px",
+  },
+  statLabel: {
+    color: "#666",
+    fontSize: "14px",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+  },
+  card: {
+    background: "white",
+    borderRadius: "16px",
+    padding: "30px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    marginBottom: "20px",
+  },
+  cardTitle: {
+    fontSize: "24px",
+    fontWeight: "bold",
+    marginBottom: "8px",
+  },
+  cardDescription: {
+    color: "#666",
+    fontSize: "14px",
+    marginBottom: "24px",
+  },
+  leaderboard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  leaderboardItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "15px",
+    padding: "15px",
+    background: "#f9fafb",
+    borderRadius: "8px",
+  },
+  leaderboardRank: {
+    fontSize: "20px",
+    fontWeight: "bold",
+    color: "#666",
+    minWidth: "40px",
+  },
+  leaderboardPhone: {
+    fontSize: "16px",
+    fontWeight: "600",
+    flex: 1,
+  },
+  leaderboardCount: {
+    fontSize: "18px",
+    fontWeight: "bold",
+  },
+  sourceList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  sourceItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px",
+    background: "#f9fafb",
+    borderRadius: "8px",
+    fontSize: "16px",
+  },
+  customerList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  customerItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px",
+    background: "#f9fafb",
+    borderRadius: "8px",
+  },
+  customerPhone: {
+    fontSize: "16px",
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  customerMeta: {
+    fontSize: "13px",
+    color: "#666",
+    marginTop: "4px",
+  },
+  customerReferrals: {
+    fontSize: "14px",
+    fontWeight: "bold",
+  },
+  tabs: {
+    display: "flex",
+    gap: "10px",
+    marginBottom: "20px",
+    borderBottom: "2px solid #e5e7eb",
+  },
+  tab: {
+    padding: "12px 20px",
+    background: "transparent",
+    border: "none",
+    borderBottom: "3px solid transparent",
+    cursor: "pointer",
+    fontSize: "16px",
+    fontWeight: "500",
+    color: "#666",
+    transition: "all 0.2s",
+  },
+  activeTab: {
+    fontWeight: "600",
+  },
+  content: {
+    marginBottom: "30px",
+  },
+  message: {
+    padding: "15px",
+    borderRadius: "8px",
+    marginBottom: "20px",
+    fontSize: "14px",
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  formGroup: {
+    marginBottom: "20px",
+  },
+  label: {
+    display: "block",
+    fontSize: "14px",
+    fontWeight: "600",
+    marginBottom: "8px",
+    color: "#374151",
+  },
+  input: {
+    width: "100%",
+    padding: "12px",
+    fontSize: "16px",
+    border: "2px solid #e5e7eb",
+    borderRadius: "8px",
+    boxSizing: "border-box",
+  },
+  button: {
+    width: "100%",
+    padding: "15px",
+    fontSize: "16px",
+    fontWeight: "600",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    transition: "all 0.2s",
+  },
+  customerDetails: {
+    marginTop: "30px",
+    paddingTop: "30px",
+    borderTop: "2px solid #e5e7eb",
+  },
+  detailRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px 0",
+    borderBottom: "1px solid #f3f4f6",
+  },
+  detailLabel: {
+    fontSize: "14px",
+    color: "#666",
+    fontWeight: "500",
+  },
+  detailValue: {
+    fontSize: "16px",
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  sectionTitle: {
+    fontSize: "18px",
+    fontWeight: "bold",
+    marginTop: "24px",
+    marginBottom: "16px",
+  },
+  referralsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  referralItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "10px",
+    background: "#f9fafb",
+    borderRadius: "8px",
+    fontSize: "14px",
+  },
+  referralDate: {
+    color: "#666",
+    fontSize: "13px",
+  },
+  footer: {
+    textAlign: "center",
+    padding: "20px",
+    background: "white",
+    borderRadius: "12px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+  },
+  footerText: {
+    fontSize: "14px",
+    color: "#666",
+    marginBottom: "10px",
+  },
+  code: {
+    display: "block",
+    padding: "12px",
+    background: "#f3f4f6",
+    borderRadius: "8px",
+    fontSize: "14px",
+    fontFamily: "monospace",
+    wordBreak: "break-all",
+    marginBottom: "10px",
+  },
+  footerSubtext: {
+    fontSize: "12px",
+    color: "#999",
+    margin: 0,
+  },
+};
